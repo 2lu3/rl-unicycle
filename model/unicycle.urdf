@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!DOCTYPE xml>
+<robot name="unicycle">
+    <material name="black">
+        <color rgba="0.2 0.2 0.2 1" />
+    </material>
+    <material name="red">
+        <color rgba="1 0 0 2.5" />
+    </material>
+
+    <joint name="joint_wheel" type="continuous">
+        <axis xyz="1 0 0" />
+        <origin xyz="0 0 0.3" rpy="1.57 0 0" />
+        <parent link="base_link" />
+        <child link="wheel_link" />
+    </joint>
+    <joint name="joint_left_pedal" type="fixed">
+        <origin xyz="0.2 0 -0.1" rpy="0 0 0" />
+        <parent link="wheel_link" />
+        <child link="left_pedal_link" />
+    </joint>
+    <joint name="joint_right_pedal" type="fixed">
+        <origin xyz="-0.2 0 0.1" rpy="0 0 0" />
+        <parent link="wheel_link" />
+        <child link="right_pedal_link" />
+    </joint>
+    <joint name="joint_saddle" type="continuous">
+        <axis xyz="1 0 0" />
+        <origin xyz="0 0.3 0" rpy="0 0 0" />
+        <parent link="wheel_link" />
+        <child link="saddle_link" />
+    </joint>
+
+    <link name="base_link" />
+    <link name="wheel_link">
+        <contact>
+            <lateral_friction value="0" />
+        </contact>
+        <inertial>
+            <mass value="1" />
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
+        </inertial>
+        <visual>
+            <geometry>
+                <cylinder radius="0.3" length="0.04" />
+            </geometry>
+            <material name="black" />
+        </visual>
+        <collision>
+            <geometry>
+                <cylinder radius="0.3" length="0.04" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="left_pedal_link">
+        <visual>
+            <geometry>
+                <cylinder radius="0.01" length="0.1" />
+            </geometry>
+            <material name="red" />
+        </visual>
+    </link>
+    <link name="right_pedal_link">
+        <visual>
+            <geometry>
+                <cylinder radius="0.01" length="0.1" />
+            </geometry>
+            <material name="red" />
+        </visual>
+    </link>
+    <link name="saddle_link">
+        <visual>
+            <geometry>
+                <box size="0.25 0.02 0.2" />
+            </geometry>
+            <material name="red" />
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.25 0.1 0.02" />
+            </geometry>
+        </collision>
+    </link>
+</robot>
