@@ -1,6 +1,6 @@
 import pybullet as p
 import pybullet_data
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 import gym
 from gym.spaces import Box
 import numpy as np
@@ -16,12 +16,12 @@ class UnicycleEnv(gym.Env):
     joints_id: dict = dict()
 
     max_force = 30
-    time_step: float = 0.01
+    time_step: float = 0.05
 
     metadata = {"render.modes": ["ansi"]}
     action_space = Box(low=-max_force, high=max_force, shape=(4,))
     reward_range: Tuple[float, float] = (-1, 100)
-    observation_space: Box = Box(low=-20, high=20, shape=(4,))
+    observation_space: Box = Box(low=-20, high=20, shape=(5,))
 
     def __init__(self, visualize=True):
         self.physicsClient: int

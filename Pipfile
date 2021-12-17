@@ -5,10 +5,18 @@ name = "pypi"
 
 [packages]
 pybullet = "*"
-gym = "*"
-numpy = "*"
-tensorflow-gpu = "*"
+tf-agents = "*"
 black = "*"
+pandas = "*"
+gym = {ref = "v0.21.0", git = "https://github.com/openai/gym"}
+keras-rl = {git = "https://github.com/matthiasplappert/keras-rl.git"}
+pillow = "*"
+opencv-python = "*"
+scikit-learn = "*"
+wandb = "*"
+keras-rl2 = "*"
+matplotlib = "*"
+tensorflow = "*"
 
 [dev-packages]
 
