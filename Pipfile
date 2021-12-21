@@ -8,6 +8,7 @@ tensorflow = "*"
 keras-rl = "*"
 matplotlib = "*"
 pybullet = "*"
+pillow = "*"
 
 [dev-packages]
 

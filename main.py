@@ -15,27 +15,27 @@ import os
 class Runner:
     window_length = 1
 
-    def __init__(self, use_gui=True, time_wait=None):
-        self.env = environment.UnicycleEnv(visualize=use_gui, time_wait=time_wait)
+    def __init__(self, use_gui=True, time_wait=None, record=False):
+        self.env = environment.UnicycleEnv(
+            visualize=use_gui, time_wait=time_wait, record=record
+        )
         self.observation_shape = (self.window_length,) + self.env.observation_space.shape  # type: ignore
         self.nb_actions: int = self.env.action_space.shape[0]  # type: ignore
 
     def _get_actor_model(self):
-        neuron_num = 16
+        neuron_num = 100
         input_layer = Input(shape=self.observation_shape)  # type: ignore
         c = Flatten()(input_layer)
-        c = Dense(neuron_num, activation="swish")(c)
-        c = Dense(neuron_num, activation="relu")(c)
-        c = Dense(neuron_num, activation="relu")(c)
-        c = Dense(neuron_num, activation="relu")(c)
-        c = Dense(neuron_num, activation="relu")(c)
+        c = Dense(neuron_num, activation="tanh")(c)
+        for _ in range(6):
+            c = Dense(neuron_num, activation="relu")(c)
         c = Dense(self.nb_actions, activation="tanh")(c)  # 出力は連続値なので、linearを使う
         model = Model(input_layer, c)
         print(model.summary())
         return model
 
     def _get_critic_model(self):
-        neuron_num = 32
+        neuron_num = 200
         action_input = Input(shape=(self.nb_actions,), name="action_input")
         observation_input = Input(
             shape=self.observation_shape, name="observation_input"
@@ -44,10 +44,8 @@ class Runner:
 
         input_laer = Concatenate()([action_input, flattened_observation])
         c = Dense(neuron_num, activation="swish")(input_laer)
-        c = Dense(neuron_num, activation="relu")(c)
-        c = Dense(neuron_num, activation="relu")(c)
-        c = Dense(neuron_num, activation="relu")(c)
-        c = Dense(neuron_num, activation="relu")(c)
+        for _ in range(6):
+            c = Dense(neuron_num, activation="relu")(c)
         c = Dense(1, activation="linear")(c)
         critic = Model(inputs=[action_input, observation_input], outputs=c)
         print(critic.summary())
@@ -85,13 +83,12 @@ class Runner:
     def learn(self, folder_name: str, step_per_episode: int, nb_steps: int):
         if folder_name[-1] != os.sep:
             folder_name = folder_name + os.sep
-
         if not os.path.exists(folder_name):
             os.mkdir(folder_name)
         print("saving to", folder_name)
 
         callback = ModelIntervalCheckpoint(
-            folder_name + "checkpoint_{episode:06d}_{reward:2.2f}.h5",
+            folder_name + "checkpoint_{step:010d}_{reward:2.2f}.h5",
             interval=1000,
             verbose=0,
         )
@@ -112,18 +109,28 @@ class Runner:
         plt.plot(
             np.arange(len(histories["episode_reward"])), histories["episode_reward"]
         )
+        plt.xlabel("step")
+        plt.ylabel("reward")
         plt.savefig(folder_name + "result.png")
         plt.show()
 
         with open(folder_name + "result.txt", "w") as f:
             for i in range(len(histories["episode_reward"])):
                 string = f'{histories["nb_steps"][i]} {histories["episode_reward"][i]}'
-                f.write(string)
+                f.write(string + "\n")
                 print(string)
 
     def trial(self):
         result = self.agent.test(self.env, nb_episodes=1, visualize=False)
         print(result)
+
+    def save_gif(self, gif_path):
+        if gif_path[-1] != os.sep:
+            gif_path = gif_path + os.sep
+        if not os.path.exists(gif_path):
+            os.mkdir(gif_path)
+        print("saving to", gif_path + "result.gif")
+        self.env.save_img(gif_path + "result.gif")
 
     def load_weights(self, filepath):
         self.agent.load_weights(filepath)
@@ -143,21 +150,24 @@ def main():
     )
     parser.add_argument("--nb-steps", help="総ステップ数", default=100000, type=int)
     parser.add_argument("--no-gui", help="GUIを表示するか", default=False)
-
     parser.add_argument("--trial", help="重みをロードするファイル名")
+    parser.add_argument("--save-gif", help="gifファイルを保存するフォルダ名", default=None)
 
     args = parser.parse_args()
 
-    no_gui  = args.no_gui == False
+    no_gui = args.no_gui == False
+    record = args.save_gif is not None
     if args.trial is None:
         runner = Runner(use_gui=no_gui)
         runner.prepare()
         runner.learn(args.learn, args.step_per_episode, args.nb_steps)
     else:
-        runner = Runner(time_wait=0.1, use_gui=no_gui)
+        runner = Runner(time_wait=0.1, use_gui=no_gui, record=record)
         runner.prepare()
         runner.load_weights(args.trial)
         runner.trial()
+        if record == True:
+            runner.save_gif(args.save_gif)
 
 
 if __name__ == "__main__":
