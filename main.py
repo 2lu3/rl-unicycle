@@ -58,7 +58,7 @@ class Runner:
         # 平均回帰課程を用いている。単純にノイズがmuに収束している
         # ここでは、mu=0に設定しているので、ノイズは0になっていく。つまり、探索を行わなくなる。
         random_process = OrnsteinUhlenbeckProcess(
-            size=self.nb_actions, theta=0.15, mu=0.1, sigma=0.3
+            size=self.nb_actions, theta=0.15, mu=0.0, sigma=0.3
         )
 
         actor = self._get_actor_model()
