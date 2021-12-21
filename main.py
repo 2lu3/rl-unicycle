@@ -3,13 +3,133 @@ from keras.models import Model
 from keras.layers import Input, Flatten, Dense, Concatenate
 from rl.callbacks import ModelIntervalCheckpoint
 from tensorflow.keras.optimizers import Adam
-from rl.agents import DDPGAgent
+from rl.agents import DDPGAgent, DQNAgent
 from rl.memory import SequentialMemory
 from rl.random import OrnsteinUhlenbeckProcess
+from rl.policy import BoltzmannQPolicy
+from rl.callbacks import Callback as KerasCallback
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 import os
+from typing import Tuple, Optional
+from keras.utils.io_utils import path_to_string
+
+
+class Callback(KerasCallback):
+    model: DQNAgent
+    def __init__(
+        self, filepath, monitor="episode_reward", verbose=0, save_best_only=True
+    ):
+        super().__init__()
+
+        self.monitor = monitor
+        self.verbose = verbose
+        self.filepath = path_to_string(filepath)
+        self.save_best_only = save_best_only
+
+        self.best: float = -np.Inf
+        self.total_steps: int = 0
+        self.total_episodes: int =0
+
+    def _set_env(self, env):
+        self.env = env
+
+    def on_step_end(self, step, logs={}):
+        self.total_steps += 1
+
+
+    def on_episode_end(self, episode, logs={}):
+        """Called at end of each episode"""
+        self.total_episodes += 1
+        self._save_model(episode=episode, logs=logs)
+
+    def _save_model(self, episode, logs: dict):
+        filepath = self.filepath.format(step=self.total_steps, episode=episode,**logs)
+        if self.save_best_only:
+            current = logs.get(self.monitor)
+            if current is None:
+                print("%s is not included in", self.monitor)
+                print(logs.keys())
+            else:
+                if self.best < current:
+                    if self.verbose > 0:
+                        print(
+                            f"\nepisode {episode}: {self.monitor} improved from {self.best:.5f} to {current:.5f}, saving model to {filepath}"
+                        )
+                    self.best = current
+                    self.model.save_weights(filepath, overwrite=True)
+                else:
+                    if self.verbose > 1:
+                        print('\nyour latest score {current:.5f} is lower than {self.best} at {self.monitor}. See you next time.')
+        else:
+            if self.verbose > 0:
+                print("\neposode {episode}: saving model to {filepath}")
+            self.model.save_weights(filepath, overwrite=True)
+
+
+class DQNRunner:
+    window_length = 1
+
+    def __init__(
+        self, folder_path: Optional[str] = None, file_path: Optional[str] = None
+    ):
+        if folder_path is None:
+            assert file_path is not None
+            self.file_path = file_path
+            folder_path = os.path.dirname(self.file_path)
+        else:
+            self.folder_path = folder_path
+
+        self.env = environment.UnicycleEnv()
+        self.observation_shape: Tuple = (self.window_length,) + self.env.observation_space.shape  # type: ignore
+        self.nb_actions: int = self.env.action_space.n  # type: ignore
+
+        self._prepare()
+
+    def fit(self, nb_steps: int, nb_max_episode_steps: int = 5000):
+        if not os.path.exists(self.folder_path):
+            os.mkdir(self.folder_path)
+        if self.folder_path[-1] != os.sep:
+            self.folder_path += os.sep
+
+        callback = Callback(self.folder_path + "weight_{episode:06d}.h5", verbose=1)
+        self.dqn.fit(
+            self.env,
+            nb_steps=nb_steps,
+            nb_max_episode_steps=nb_max_episode_steps,
+            verbose=1,
+            callbacks=[callback]
+        )
+
+        self.dqn.save_weights("weight_last.h5f", overwrite=True)
+
+    def test(self, nb_episodes=1):
+        self.dqn.test(self.env, nb_episodes=nb_episodes)
+        self.env.save_img(path=self.folder_path + "result.gif")
+
+    def _create_model(self, neuron_num=16, layer_num=3, activation="relu"):
+        input_layer = Input(shape=self.observation_shape)
+        c = Flatten()(input_layer)
+        for _ in range(layer_num):
+            c = Dense(neuron_num, activation=activation)(c)
+        c = Dense(self.nb_actions, activation="linear")(c)
+        model = Model(input_layer, c)
+        print(model.summary())
+        return model
+
+    def _prepare(self):
+        memory = SequentialMemory(limit=10000, window_length=self.window_length)
+        policy = BoltzmannQPolicy()
+        self.dqn = DQNAgent(
+            model=self._create_model(),
+            nb_actions=self.nb_actions,
+            memory=memory,
+            nb_steps_warmup=50,
+            target_model_update=1e-2,
+            policy=policy,
+        )
+        self.dqn.compile(Adam(lr=1e-3), metrics=["mae"])
 
 
 class Runner:
@@ -144,16 +264,24 @@ class Tester:
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--learn", help="重みなどを保存するフォルダ名")
-    parser.add_argument(
-        "--step-per-episode", help="エピソードあたりのステップ", default=500, type=int
-    )
+    parser.add_argument("--learn", help="重みなどを保存するフォルダ名", default="new")
+    # parser.add_argument(
+    #    "--step-per-episode", help="エピソードあたりのステップ", default=500, type=int
+    # )
     parser.add_argument("--nb-steps", help="総ステップ数", default=100000, type=int)
-    parser.add_argument("--no-gui", help="GUIを表示するか", default=False)
+    # parser.add_argument("--no-gui", help="GUIを表示するか", default=False)
     parser.add_argument("--trial", help="重みをロードするファイル名")
-    parser.add_argument("--save-gif", help="gifファイルを保存するフォルダ名", default=None)
+    # parser.add_argument("--save-gif", help="gifファイルを保存するフォルダ名", default=None)
 
     args = parser.parse_args()
+
+    runner = DQNRunner(folder_path=args.learn, file_path=args.trial)
+    if args.learn is not None:
+        runner.fit(args.nb_steps)
+    else:
+        runner.test()
+
+    return
 
     no_gui = args.no_gui == False
     record = args.save_gif is not None
