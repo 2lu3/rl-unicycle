@@ -18,6 +18,7 @@ from keras.utils.io_utils import path_to_string
 
 class Callback(KerasCallback):
     model: DQNAgent
+
     def __init__(
         self, filepath, monitor="episode_reward", verbose=0, save_best_only=True
     ):
@@ -30,14 +31,16 @@ class Callback(KerasCallback):
 
         self.best: float = -np.Inf
         self.total_steps: int = 0
-        self.total_episodes: int =0
+        self.total_episodes: int = 0
 
     def _set_env(self, env):
         self.env = env
 
-    def on_step_end(self, step, logs={}):
-        self.total_steps += 1
+    def on_action_end(self, action, logs={}):
+        pass
 
+    def on_step_end(self, steps, logs={}):
+        self.total_steps += 1
 
     def on_episode_end(self, episode, logs={}):
         """Called at end of each episode"""
@@ -45,7 +48,7 @@ class Callback(KerasCallback):
         self._save_model(episode=episode, logs=logs)
 
     def _save_model(self, episode, logs: dict):
-        filepath = self.filepath.format(step=self.total_steps, episode=episode,**logs)
+        filepath = self.filepath.format(step=self.total_steps, episode=episode, **logs)
         if self.save_best_only:
             current = logs.get(self.monitor)
             if current is None:
@@ -61,7 +64,9 @@ class Callback(KerasCallback):
                     self.model.save_weights(filepath, overwrite=True)
                 else:
                     if self.verbose > 1:
-                        print('\nyour latest score {current:.5f} is lower than {self.best} at {self.monitor}. See you next time.')
+                        print(
+                            "\nyour latest score {current:.5f} is lower than {self.best} at {self.monitor}. See you next time."
+                        )
         else:
             if self.verbose > 0:
                 print("\neposode {episode}: saving model to {filepath}")
@@ -77,7 +82,7 @@ class DQNRunner:
         if folder_path is None:
             assert file_path is not None
             self.file_path = file_path
-            folder_path = os.path.dirname(self.file_path)
+            self.folder_path = os.path.dirname(self.file_path) + os.sep
         else:
             self.folder_path = folder_path
 
@@ -94,19 +99,26 @@ class DQNRunner:
             self.folder_path += os.sep
 
         callback = Callback(self.folder_path + "weight_{episode:06d}.h5", verbose=1)
-        self.dqn.fit(
+        histories = self.dqn.fit(
             self.env,
             nb_steps=nb_steps,
             nb_max_episode_steps=nb_max_episode_steps,
             verbose=1,
-            callbacks=[callback]
+            callbacks=[callback],
         )
 
         self.dqn.save_weights(self.folder_path + "weight_last.h5f", overwrite=True)
 
+        self._plot(histories)
+
     def test(self, nb_episodes=1):
-        self.dqn.test(self.env, nb_episodes=nb_episodes)
-        self.env.save_img(path=self.folder_path + "result.gif")
+        self.dqn.load_weights(self.file_path)
+        self.env.start_recording()
+        history = self.dqn.test(
+            self.env, nb_episodes=nb_episodes, verbose=0, visualize=False
+        )
+        self.env.save_recording(self.folder_path + "result.gif", time_scale=1)
+        self._plot(history, "test")
 
     def _create_model(self, neuron_num=16, layer_num=3, activation="relu"):
         input_layer = Input(shape=self.observation_shape)
@@ -130,6 +142,22 @@ class DQNRunner:
             policy=policy,
         )
         self.dqn.compile(Adam(lr=1e-3), metrics=["mae"])
+
+    def _plot(self, histories, filename="result"):
+        histories = histories.history
+        with open(self.folder_path + filename + ".txt", "w") as f:
+            f.write("nb_step episode_reward\n")
+            for i in range(len(histories["episode_reward"])):
+                string = f'{histories["nb_steps"][i]} {histories["episode_reward"][i]}'
+                f.write(string + "\n")
+                print(string)
+        plt.plot(
+            np.arange(len(histories["episode_reward"])), histories["episode_reward"]
+        )
+        plt.xlabel("step")
+        plt.ylabel("reward")
+        plt.savefig(self.folder_path + filename + ".png")
+        plt.show()
 
 
 class Runner:
@@ -264,23 +292,25 @@ class Tester:
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--learn", help="重みなどを保存するフォルダ名", default="new")
+    parser.add_argument("--learn", help="重みなどを保存するフォルダ名")
     # parser.add_argument(
     #    "--step-per-episode", help="エピソードあたりのステップ", default=500, type=int
     # )
     parser.add_argument("--nb-steps", help="総ステップ数", default=100000, type=int)
     # parser.add_argument("--no-gui", help="GUIを表示するか", default=False)
-    parser.add_argument("--trial", help="重みをロードするファイル名")
+    parser.add_argument("--test", help="重みをロードするファイル名")
     # parser.add_argument("--save-gif", help="gifファイルを保存するフォルダ名", default=None)
 
     args = parser.parse_args()
 
-    runner = DQNRunner(folder_path=args.learn, file_path=args.trial)
+    if args.learn is None and args.test is None:
+        args.learn = "new"
+
+    runner = DQNRunner(folder_path=args.learn, file_path=args.test)
     if args.learn is not None:
         runner.fit(args.nb_steps)
     else:
         runner.test()
-
     return
 
     no_gui = args.no_gui == False

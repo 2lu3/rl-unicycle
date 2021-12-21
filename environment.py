@@ -12,7 +12,7 @@ class UnicycleEnv(gym.Env):
     # 定数
     time_step = 0.01  # 1ステップの時間
     torque_scale = 5  # トルク = (-1 ~ 1) x torque_scale
-    human_scale = 0.1  # 座標 = (-1 ~ 1) x human_scale
+    human_scale = 0.05  # 座標 = (-1 ~ 1) x human_scale
 
     pos_goal: np.ndarray = np.array([5, 0, 0.3])
 
@@ -27,15 +27,18 @@ class UnicycleEnv(gym.Env):
     pos_human: float = 0
 
     metadata = {"render.modes": ["ansi"]}
-    #action_space = Box(low=-1, high=1, shape=(2,))
+    # action_space = Box(low=-1, high=1, shape=(2,))
     action_space = Discrete(2)
     reward_range: Tuple[float, float] = (-1, 1)
-    #observation_space: Box = Box(low=-20, high=20, shape=(16,))
+    # observation_space: Box = Box(low=-20, high=20, shape=(16,))
     observation_space: Box = Box(low=-20, high=20, shape=(2,))
+
+    recording = False
+    video: List = []
 
     step_id = 0
 
-    def __init__(self, time_wait=None, debug=False, visualize=True, record=False):
+    def __init__(self, time_wait=None, debug=False, visualize=True):
         def _connect_physic_client(visualize):
             if visualize == True:
                 return p.connect(p.GUI)
@@ -44,7 +47,6 @@ class UnicycleEnv(gym.Env):
 
         self.is_debug = debug
         self.time_wait = time_wait
-        self.is_record = record
 
         self.physicsClient: int = _connect_physic_client(visualize)
         p.setTimeStep(self.time_step)
@@ -53,13 +55,12 @@ class UnicycleEnv(gym.Env):
         self._load_urdf()
         self._load_joints()
 
-        if self.is_record:
-            camera_img = p.getCameraImage(320, 320)
-            self.video = [Image.fromarray(camera_img[2])]
-
         if self.is_debug:
             p.addUserDebugParameter("wheel", -1, 1, 0)
             p.addUserDebugParameter("human", -1, 1, 0)
+
+        with open("action.log", "w") as _:
+            pass
 
     def step(self, action: int):
         """Run one timestep of the environment's dynamics.
@@ -74,30 +75,34 @@ class UnicycleEnv(gym.Env):
             done: 終了したかどうか
             info (dict): デバッグ用の情報
         """
-        with open("action.log", "a") as f:
-            f.write(str(action) + '\n')
 
+        with open("action.log", "a") as f:
+            f.write(str(action) + ' ')
         if self.is_debug:
             self._apply_wheel_torque(p.readUserDebugParameter(0))
             self._apply_human(p.readUserDebugParameter(1))
         else:
             # self._apply_wheel_torque(action[0])
             # self._apply_human(action[1])
+            self._apply_wheel_torque(8)
             if action == 0:
-                self._apply_human(0.05)
-            else:
-                self._apply_human(-0.05)
+                self._apply_human(-self.human_scale)
+            elif action == 1:
+                self._apply_human(0)
+            elif action == 2:
+                self._apply_human(self.human_scale)
+
 
         p.stepSimulation()
         self.step_id += 1
         self._update_coordinate()
 
-        if self.time_wait is not None:
-            time.sleep(self.time_wait)
-
-        if self.is_record:
+        if self.recording:
             camera_img = p.getCameraImage(320, 320)
             self.video.append(Image.fromarray(camera_img[2]))
+
+        if self.time_wait is not None:
+            time.sleep(self.time_wait)
 
         return (
             self._get_observation(),
@@ -127,12 +132,20 @@ class UnicycleEnv(gym.Env):
         self._update_coordinate()
         return self._get_observation()
 
-    def save_img(self, path):
+    def start_recording(self):
+        camera_img = p.getCameraImage(320, 320)
+        self.video = [Image.fromarray(camera_img[2])]
+        self.recording = True
+
+
+
+    def save_recording(self, filepath, time_scale):
+        self.recording = False
         self.video[0].save(
-            path,
+            filepath,
             save_all=True,
             append_images=self.video[1:],
-            duration=self.time_step * 1000 * 5,
+            duration=self.time_step * 1000 * time_scale,
             loop=1,
         )
 
@@ -220,10 +233,10 @@ class UnicycleEnv(gym.Env):
 
 
 def main():
-    env = UnicycleEnv(debug=True)
+    env = UnicycleEnv(debug=False)
     for _ in range(100):
-        for i in range(500):
-            _, _, is_done, _= env.step(0)
+        for _ in range(500):
+            _, _, is_done, _ = env.step(0)
             if is_done:
                 print("done")
                 break
