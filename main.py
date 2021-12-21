@@ -102,7 +102,7 @@ class DQNRunner:
             callbacks=[callback]
         )
 
-        self.dqn.save_weights("weight_last.h5f", overwrite=True)
+        self.dqn.save_weights(self.folder_path + "weight_last.h5f", overwrite=True)
 
     def test(self, nb_episodes=1):
         self.dqn.test(self.env, nb_episodes=nb_episodes)
