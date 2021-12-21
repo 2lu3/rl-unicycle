@@ -8,27 +8,25 @@ from rl.memory import SequentialMemory
 from rl.random import OrnsteinUhlenbeckProcess
 import matplotlib.pyplot as plt
 import numpy as np
-import datetime
-import time
+import argparse
+import os
 
 
 class Runner:
     window_length = 1
 
-    def __init__(self):
-        self.env = environment.UnicycleEnv()
-
+    def __init__(self, use_gui=True, time_wait=None):
+        self.env = environment.UnicycleEnv(visualize=use_gui, time_wait=time_wait)
         self.observation_shape = (self.window_length,) + self.env.observation_space.shape  # type: ignore
         self.nb_actions: int = self.env.action_space.shape[0]  # type: ignore
 
-        self.model = self._get_actor_model()
-
     def _get_actor_model(self):
-        neuron_num = 8
+        neuron_num = 16
         input_layer = Input(shape=self.observation_shape)  # type: ignore
         c = Flatten()(input_layer)
         c = Dense(neuron_num, activation="swish")(c)
-        c = Dense(neuron_num, activation="swish")(c)
+        c = Dense(neuron_num, activation="relu")(c)
+        c = Dense(neuron_num, activation="relu")(c)
         c = Dense(neuron_num, activation="relu")(c)
         c = Dense(neuron_num, activation="relu")(c)
         c = Dense(self.nb_actions, activation="tanh")(c)  # 出力は連続値なので、linearを使う
@@ -37,7 +35,7 @@ class Runner:
         return model
 
     def _get_critic_model(self):
-        neuron_num = 16
+        neuron_num = 32
         action_input = Input(shape=(self.nb_actions,), name="action_input")
         observation_input = Input(
             shape=self.observation_shape, name="observation_input"
@@ -55,20 +53,20 @@ class Runner:
         print(critic.summary())
         return critic, action_input
 
-    def run(self):
+    def prepare(self):
         # Experience Bufferの設定
         memory = SequentialMemory(limit=50000, window_length=self.window_length)
         # 行動選択時に加えるノイズ(探索のため)
         # 平均回帰課程を用いている。単純にノイズがmuに収束している
         # ここでは、mu=0に設定しているので、ノイズは0になっていく。つまり、探索を行わなくなる。
         random_process = OrnsteinUhlenbeckProcess(
-            size=self.nb_actions, theta=0.15, mu=0.0, sigma=0.3
+            size=self.nb_actions, theta=0.15, mu=0.1, sigma=0.3
         )
 
         actor = self._get_actor_model()
         critic, action_input = self._get_critic_model()
 
-        agent = DDPGAgent(
+        self.agent = DDPGAgent(
             nb_actions=self.nb_actions,
             actor=actor,
             critic=critic,
@@ -82,37 +80,53 @@ class Runner:
         )
 
         # agent.compile(Adam(lr=.0001, clipnorm=1.), metrics=['mae'])
-        agent.compile(Adam())
+        self.agent.compile(Adam())
+
+    def learn(self, folder_name: str, step_per_episode: int, nb_steps: int):
+        if folder_name[-1] != os.sep:
+            folder_name = folder_name + os.sep
+
+        if not os.path.exists(folder_name):
+            os.mkdir(folder_name)
+        print("saving to", folder_name)
 
         callback = ModelIntervalCheckpoint(
-            "weight/checkpoint_{episode:06d}_{reward:2.2f}.h5", interval=10000, verbose=0
+            folder_name + "checkpoint_{episode:06d}_{reward:2.2f}.h5",
+            interval=1000,
+            verbose=0,
         )
 
-        step_per_episode = 500
-        all_step_num = step_per_episode * 10000
-
-        history = agent.fit(
+        histories = self.agent.fit(
             self.env,
-            nb_steps=all_step_num,
+            nb_steps=nb_steps,
             visualize=False,
             verbose=1,
             nb_max_episode_steps=step_per_episode,
             callbacks=[callback],
         )
 
-        agent.save_weights("weight/ddpg_weights_{}.h5f".format(datetime.datetime.now()))
+        self.agent.save_weights(folder_name + "ddpg_weights", overwrite=True)
 
-        print(history.history)
-
-        history = history.history
-        print(history)
-        with open("result.txt", "w") as f:
-            f.write(history)
-        plt.plot(np.arange(len(history["episode_reward"])), history["episode_reward"])
-        plt.savefig("result.png")
+        histories = histories.history
+        print(histories)
+        plt.plot(
+            np.arange(len(histories["episode_reward"])), histories["episode_reward"]
+        )
+        plt.savefig(folder_name + "result.png")
         plt.show()
 
-        # agent.test(self.env, nb_episodes=5, visualize=True)
+        with open(folder_name + "result.txt", "w") as f:
+            for i in range(len(histories["episode_reward"])):
+                string = f'{histories["nb_steps"][i]} {histories["episode_reward"][i]}'
+                f.write(string)
+                print(string)
+
+    def trial(self):
+        result = self.agent.test(self.env, nb_episodes=1, visualize=False)
+        print(result)
+
+    def load_weights(self, filepath):
+        self.agent.load_weights(filepath)
 
 
 class Tester:
@@ -121,8 +135,30 @@ class Tester:
 
 
 def main():
-    runner = Runner()
-    runner.run()
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--learn", help="重みなどを保存するフォルダ名")
+    parser.add_argument(
+        "--step-per-episode", help="エピソードあたりのステップ", default=500, type=int
+    )
+    parser.add_argument("--nb-steps", help="総ステップ数", default=100000, type=int)
+    parser.add_argument("--no-gui", help="GUIを表示するか", default=False)
+
+    parser.add_argument("--trial", help="重みをロードするファイル名")
+
+    args = parser.parse_args()
+
+    no_gui  = args.no_gui == False
+    if args.trial is None:
+        runner = Runner(use_gui=no_gui)
+        runner.prepare()
+        runner.learn(args.learn, args.step_per_episode, args.nb_steps)
+    else:
+        runner = Runner(time_wait=0.1, use_gui=no_gui)
+        runner.prepare()
+        runner.load_weights(args.trial)
+        runner.trial()
+
 
 if __name__ == "__main__":
     main()

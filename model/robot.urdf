@@ -9,11 +9,14 @@
     </material>
 
     <link name="base">
+        <inertial>
+            <mass value="0.001" />
+            <inertia ixx="0.001" ixy="0" ixz="0.01" iyy="0" iyz="0" izz="0.01" />
+        </inertial>
     </link>
 
     <link name="wheel">
         <inertial>
-            <origin rpy="0 0 0" xyz="0 0 0" />
             <mass value="3.0" />
             <inertia ixx="0.1" ixy="0" ixz="0.1" iyy="0" iyz="0" izz="0.1" />
         </inertial>
@@ -38,6 +41,10 @@
     </joint>
 
     <link name="left_pedal">
+        <inertial>
+            <mass value="0.001" />
+            <inertia ixx="0.001" ixy="0" ixz="0.01" iyy="0" iyz="0" izz="0.01" />
+        </inertial>
         <visual>
             <geometry>
                 <cylinder radius="0.01" length="0.1" />
@@ -52,6 +59,10 @@
     </joint>
 
     <link name="right_pedal">
+        <inertial>
+            <mass value="0.001" />
+            <inertia ixx="0.001" ixy="0" ixz="0.01" iyy="0" iyz="0" izz="0.01" />
+        </inertial>
         <visual>
             <geometry>
                 <cylinder radius="0.01" length="0.1" />
@@ -65,66 +76,28 @@
         <child link="right_pedal" />
     </joint>
 
-    <link name="body1">
-        <visual>
-            <geometry>
-                <box size="0.1 0.05 0.1" />
-            </geometry>
-            <origin xyz="0 -0.4 0" rpy="0 0 0" />
-        </visual>
+    <link name="human">
         <inertial>
-            <mass value="0.1" />
-            <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01" />
-        </inertial>
-    </link>
-    <joint name="body1" type="continuous">
-        <axis xyz="0 0 1" />
-        <origin xyz="0 0 0" rpy="0 0 0" />
-        <parent link="wheel" />
-        <child link="body1" />
-    </joint>
-
-    <link name="body2">
-        <visual>
-            <geometry>
-                <box size="0.1 0.05 0.1" />
-            </geometry>
-            <origin xyz="0 -0.5 0" rpy="0 0 0" />
-        </visual>
-        <inertial>
-            <mass value="0.1" />
+            <mass value="50" />
             <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
         </inertial>
-    </link>
-    <joint name="body2" type="revolute">
-        <axis xyz="1 0 0" />
-        <origin xyz="0 0 0" rpy="0 0 0" />
-        <parent link="body1" />
-        <child link="body2" />
-        <limit lower="-0.5" upper="0.5" effort="0" velocity="0" />
-    </joint>
-
-    <link name="head">
         <visual>
-            <origin xyz="0 -0.1 0" rpy="0 0 0" />
             <geometry>
-                <box size="0.2 0.2 0.2" />
+                <box size="0.1 0.1 0.1" />
             </geometry>
             <material name="red" />
         </visual>
-        <inertial>
-            <mass value="1" />
-            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
-        </inertial>
         <collision>
             <geometry>
                 <box size="0.2 0.2 0.2" />
             </geometry>
         </collision>
     </link>
-    <joint name="head" type="fixed">
-        <origin xyz="0 -0.8 0" rpy="0 0 0" />
-        <parent link="body2" />
-        <child link="head" />
+    <joint name="human" type="prismatic">
+        <axis xyz="0 1 0" />
+        <limit lower="-0.1" upper="0.1" effot="0" velocity="0" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <parent link="base" />
+        <child link="human" />
     </joint>
 </robot>
