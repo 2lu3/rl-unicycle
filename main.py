@@ -154,7 +154,7 @@ class DQNRunner:
         plt.plot(
             np.arange(len(histories["episode_reward"])), histories["episode_reward"]
         )
-        plt.xlabel("step")
+        plt.xlabel("episode")
         plt.ylabel("reward")
         plt.savefig(self.folder_path + filename + ".png")
         plt.show()

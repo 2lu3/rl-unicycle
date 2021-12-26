@@ -16,8 +16,9 @@ class UnicycleEnv(gym.Env):
 
     pos_goal: np.ndarray = np.array([5, 0, 0.3])
 
+    #pos_start: np.ndarray = np.concatenate([np.random.random(2) *10, np.array([0.3])])
     pos_start: np.ndarray = np.array([0, 0, 0.3])
-    orn_start: np.ndarray = np.ndarray([0, 0, 0])
+    orn_start: np.ndarray = np.array([0, 0, 0])
 
     pos_previous_robot: np.ndarray = pos_start.copy()
 
@@ -30,13 +31,16 @@ class UnicycleEnv(gym.Env):
     # action_space = Box(low=-1, high=1, shape=(2,))
     action_space = Discrete(2)
     reward_range: Tuple[float, float] = (-1, 1)
-    # observation_space: Box = Box(low=-20, high=20, shape=(16,))
-    observation_space: Box = Box(low=-20, high=20, shape=(2,))
+    #observation_space: Box = Box(low=-20, high=20, shape=(16,))
+    observation_space: Box = Box(low=-20, high=20, shape=(7,))
+    #observation_space: Box = Box(low=-20, high=20, shape=(2,))
 
     recording = False
     video: List = []
 
     step_id = 0
+
+    failed_num = 0
 
     def __init__(self, time_wait=None, debug=False, visualize=True):
         def _connect_physic_client(visualize):
@@ -84,12 +88,12 @@ class UnicycleEnv(gym.Env):
         else:
             # self._apply_wheel_torque(action[0])
             # self._apply_human(action[1])
-            self._apply_wheel_torque(8)
+            self._apply_wheel_torque(0)
             if action == 0:
                 self._apply_human(-self.human_scale)
-            elif action == 1:
-                self._apply_human(0)
-            elif action == 2:
+            #elif action == 1:
+            #    self._apply_human(0)
+            else:
                 self._apply_human(self.human_scale)
 
 
@@ -124,6 +128,8 @@ class UnicycleEnv(gym.Env):
         """
         # p.resetSimulation()
         self.step_id = 0
+        #self.pos_start = np.concatenate([np.random.rand(2) * 10, np.array([0.3])])
+        self.pos_start = np.array([0, 0, 0.3])
         p.resetBasePositionAndOrientation(
             self.unicycle_id, self.pos_start, p.getQuaternionFromEuler([0, 0, 0])
         )
@@ -177,14 +183,14 @@ class UnicycleEnv(gym.Env):
             #    self.pos_goal[1] - self.pos_robot[1],
             #    self.pos_goal[2] - self.pos_robot[2],
             # ]
-            list(self.pos_robot)
-            + list(self.orn_robot)
+            #list(self.pos_robot)
+            list(self.orn_robot)
             + list(p.getEulerFromQuaternion(self.orn_robot))
-            + list(linear_velocity)
-            + list(angular_velocity)
-            # + [self.pos_human, wheel_velocity]
+            #+ list(linear_velocity)
+            #+ list(angular_velocity)
+            #+ [self.pos_human, wheel_velocity]
         )
-        observation = [self.pos_robot[1], linear_velocity[1]]
+        #observation = [self.pos_robot[1], linear_velocity[1]]
         return observation
 
     def _calc_reward(self) -> float:
@@ -205,6 +211,14 @@ class UnicycleEnv(gym.Env):
             return 1
 
     def _decide_is_end(self):
+        if self.pos_robot[2] < 0.05:
+            self.failed_num += 1
+            if self.failed_num > 10:
+                self.failed_num = 0
+                return True
+            else:
+                self.reset()
+        return False
         return self.pos_robot[2] < 0.05
 
     def _get_info(self) -> Dict[str, np.ndarray]:
